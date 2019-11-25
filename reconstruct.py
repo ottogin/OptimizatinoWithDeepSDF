@@ -23,6 +23,7 @@ def reconstruct(
     num_samples=30000,
     lr=5e-4,
     l2reg=False,
+    initial_latent=None,
 ):
     def adjust_learning_rate(
         initial_lr, optimizer, num_iterations, decreased_by, adjust_lr_every
@@ -39,6 +40,10 @@ def reconstruct(
     else:
         latent = torch.normal(stat[0].detach(), stat[1].detach()).cuda()
 
+    if initial_latent is not None:
+        latent = torch.Tensor(initial_latent.cpu().detach().numpy()).cuda()
+        
+
     latent.requires_grad = True
 
     optimizer = torch.optim.Adam([latent], lr=lr)
@@ -47,6 +52,7 @@ def reconstruct(
     loss_l1 = torch.nn.L1Loss()
 
     for e in range(num_iterations):
+         
 
         decoder.eval()
         sdf_data = deep_sdf.data.unpack_sdf_samples_from_ram(
