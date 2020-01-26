@@ -113,7 +113,7 @@ def create_mesh(
     )
 
 
-def get_latent_from_mesh(decoder, latent_size):
+def get_latent_from_mesh(decoder, latent_size, num_iterations=500, num_samples=100):
     process_mesh('../Expirements/data/original_mesh.ply', '../Expirements/data/original_SDF.npz', 
              'bin/PreprocessMesh', [])
     
@@ -123,12 +123,12 @@ def get_latent_from_mesh(decoder, latent_size):
     
     err, latent = reconstruct(
                 decoder,
-                500,
+                num_iterations,
                 latent_size,
                 data_sdf,
                 0.01,  # [emp_mean,emp_var],
                 0.1,
-                num_samples=50,
+                num_samples=num_samples,
                 lr=5e-3,
                 l2reg=True,
             )
