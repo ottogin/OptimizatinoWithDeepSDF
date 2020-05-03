@@ -1,18 +1,28 @@
+import os
+os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+
+# from mesh_to_sdf import sample_sdf_near_surface
+
+import trimesh
+# import pyrender
+import numpy as np
+
 import json
 import numpy as np
-import os
 import time
 import skimage.measure
 import subprocess
 import random
 import pandas as pd
 from tqdm import tqdm_notebook
+import matplotlib as mpl
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 
 import torch
 from sklearn.neighbors import KDTree
 
-from mayavi import mlab
+#from mayavi import mlab
 import plyfile
 from pyntcloud import PyntCloud
 from plyfile import PlyData
@@ -113,8 +123,9 @@ def create_mesh(
     )
 
 
-def get_latent_from_mesh(decoder, latent_size, num_iterations=500, num_samples=100):
-    process_mesh('../Expirements/data/original_mesh.ply', '../Expirements/data/original_SDF.npz', 
+def get_latent_from_mesh(decoder, latent_size, mesh_path='../Expirements/data/original_mesh.ply', 
+                         num_iterations=500, num_samples=100):
+    process_mesh(mesh_path, '../Expirements/data/original_SDF.npz', 
              'bin/PreprocessMesh', [])
     
     data_sdf = deep_sdf.data.read_sdf_samples_into_ram('../Expirements/data/original_SDF.npz')
@@ -134,6 +145,27 @@ def get_latent_from_mesh(decoder, latent_size, num_iterations=500, num_samples=1
             )
     return latent
     
+    
+def get_latent_from_mesh_cpu(decoder, latent_size, mesh, 
+                             num_iterations=500, num_samples=100):
+    
+    points, sdf = sample_sdf_near_surface(mesh)
+    sdfs = np.hstack((points, sdf[:, None]))
+    data_sdf = [torch.from_numpy(sdfs[sdfs[:, 3] > 0, :]), 
+                torch.from_numpy(sdfs[sdfs[:, 3] < 0, :])]
+
+    err, latent = reconstruct(
+                decoder,
+                num_iterations,
+                latent_size,
+                data_sdf,
+                0.01,  # [emp_mean,emp_var],
+                0.1,
+                num_samples=num_samples,
+                lr=5e-3,
+                l2reg=True,
+            )
+    return latent
     
 
 def convert_sdf_samples_to_ply(
@@ -227,6 +259,41 @@ def plot_mesh_from_vector(decoder, initial_latent, N=256):
     
     cloud = PyntCloud.from_file('../Expirements/data/original_mesh.ply')
     cloud.plot(background='white', initial_point_size=0.003)
+    
+
+def get_trimesh_from_torch_geo_with_colors(mesh, preds):
+    norm = mpl.colors.Normalize(vmin= -8, vmax=8)
+    cmap = cm.hot
+    m = cm.ScalarMappable(norm=norm, cmap=cmap)
+    
+    verticies = mesh.x.cpu().detach()
+    faces = mesh.face.t().cpu().detach()
+    return trimesh.Trimesh(vertices=verticies, faces=faces, 
+                           vertex_colors=list(map(lambda c: m.to_rgba(c),  preds[:, 0].cpu().detach())))
+    
+    
+def get_trimesh_from_ply_with_colors(ply_mesh, preds):
+    norm = mpl.colors.Normalize(vmin= -8, vmax=8)
+    cmap = cm.hot
+    m = cm.ScalarMappable(norm=norm, cmap=cmap)
+    
+    verticies = np.array([ply_mesh['vertex']['x'], ply_mesh['vertex']['y'], ply_mesh['vertex']['z']]).transpose()
+    faces = ply_mesh['face']['vertex_indices']
+    return trimesh.Trimesh(vertices=verticies, faces=faces, 
+                           vertex_colors=list(map(lambda c: m.to_rgba(c),  preds[:, 0].cpu().detach())))
+    
+    
+def get_trimesh_from_latent(decoder, latent, N=256):
+    with torch.no_grad():
+        ply_mesh = create_mesh( decoder,
+                            latent,
+                            N=N,
+                            max_batch=int(2 ** 18),
+                            offset=None,
+                            scale=None)
+    verticies = np.array([ply_mesh['vertex']['x'], ply_mesh['vertex']['y'], ply_mesh['vertex']['z']]).transpose()
+    faces = ply_mesh['face']['vertex_indices']
+    return trimesh.Trimesh(vertices=verticies, faces=faces)
 
 def get_cloud_from_latent(decoder, initial_latent, N=256, save_path=None):
     ply_mesh = None
@@ -262,7 +329,7 @@ def get_points_from_latent(decoder, initial_latent, N=256, point_num=None, save_
 
 
 def plot_points_from_torch(tensor):
-    cloud = PyntCloud(pd.DataFrame(tensor.detach().cpu().numpy(), columns=['x', 'y', 'z']))
+    cloud = PyntCloud(pd.DataFrame(tensor, columns=['x', 'y', 'z']))
     cloud.plot(background='white', initial_point_size=0.003)
     
 def chamfer_distance_without_batch(p1, p2, debug=False):

@@ -33,7 +33,7 @@ def reconstruct(
             param_group["lr"] = lr
 
     decreased_by = 10
-    adjust_lr_every = int(num_iterations / 2)
+    adjust_lr_every = int(num_iterations / 4)
 
     if type(stat) == type(0.1):
         latent = torch.ones(1, latent_size).normal_(mean=0, std=stat).cuda()
@@ -90,6 +90,7 @@ def reconstruct(
             logging.debug(e)
             logging.debug(latent.norm())
         loss_num = loss.cpu().data.numpy()
+    print(loss)
 
     return loss_num, latent
 

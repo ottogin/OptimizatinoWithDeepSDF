@@ -30,16 +30,16 @@ def plot_mesh_3d(vertices, faces, elev=45, azim=30, filename=None):
     plt.close()
     
     
-def saveMeshPly(data, out_path):
+def saveMeshPly(verticies, answers, out_path):
     def toColor(c, vmin, vmax):
         inital = int(255 * (1 - (c - vmin) / (vmax - vmin)) )
         return max(min(255, inital), 0)
     
     # Generated point cloud, with colors:
-    vertex = np.array([tuple(x) for x in data.x], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+    vertex = np.array([tuple(x) for x in verticies], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
 
     # Colors
-    colors=np.copy(data.y[:,0]) # Pressure
+    colors=np.copy(answers[:,0]) # Pressure
     threshold = np.max(colors) #np.percentile(colors, 99.5)
     # vmin, vmax = np.min(colors), np.max(colors[colors < threshold])
     vmin, vmax = np.percentile(colors, 30), np.percentile(colors, 70)

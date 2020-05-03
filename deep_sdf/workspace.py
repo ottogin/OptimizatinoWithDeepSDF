@@ -90,7 +90,6 @@ def load_latent_vectors(experiment_directory, checkpoint):
         )
 
     data = torch.load(filename)
-
     num_vecs = data["latent_codes"].size()[0]
 
     lat_vecs = []

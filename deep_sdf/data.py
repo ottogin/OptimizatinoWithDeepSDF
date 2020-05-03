@@ -27,7 +27,7 @@ def get_instance_filenames(data_source, split):
                     #     'Requested non-existent file "' + instance_filename + "'"
                     # )
                     logging.warning(
-                        "Requested non-existent file '{}'".format(instance_filename)
+                        "Requested non-existent file '{}'".format(os.path.join(data_source, ws.sdf_samples_subdir, instance_filename))
                     )
                 npzfiles += [instance_filename]
     return npzfiles

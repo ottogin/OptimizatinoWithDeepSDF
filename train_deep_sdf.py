@@ -121,11 +121,15 @@ def load_latent_vectors(experiment_directory, filename, lat_vecs):
         raise Exception('latent state file "{}" does not exist'.format(full_filename))
 
     data = torch.load(full_filename)
-
+     
+    if not isinstance(data["latent_codes"], torch.Tensor):
+        data["latent_codes"]["weight"].requires_grad = True
+        data["latent_codes"] = data["latent_codes"]["weight"][:, None, :]
+        
     if not len(lat_vecs) == data["latent_codes"].size()[0]:
         raise Exception(
             "num latent codes mismatched: {} vs {}".format(
-                len(lat_vecs), data["latent_codes"].size()[2]
+                len(lat_vecs), data["latent_codes"].size()[0]
             )
         )
 
@@ -217,7 +221,7 @@ def append_parameter_magnitudes(param_mag_log, model):
         param_mag_log[name].append(param.data.norm().item())
 
 
-def main_function(experiment_directory, continue_from, batch_split):
+def main_function(experiment_directory, continue_from, batch_split, finetune_from):
 
     logging.debug("running " + experiment_directory)
 
@@ -417,6 +421,17 @@ def main_function(experiment_directory, continue_from, batch_split):
         start_epoch = model_epoch + 1
 
         logging.debug("loaded")
+        
+    if finetune_from is not None:
+
+        logging.info('Finetuning from "{}"'.format(finetune_from))
+        if not os.path.isfile(finetune_from):
+            raise Exception('model state dict "{}" does not exist'.format(finetune_from))
+
+        data = torch.load(finetune_from)
+        decoder.load_state_dict(data["model_state_dict"])
+        
+        logging.debug("loaded on epoch {}".format(data["epoch"]))
 
     logging.info("starting from epoch {}".format(start_epoch))
 
@@ -540,6 +555,12 @@ if __name__ == "__main__":
         + "an epochal snapshot.",
     )
     arg_parser.add_argument(
+        "--finetune",
+        "-f",
+        dest="finetune_from",
+        help="A snapshot to finetune a model from. The difference with continue is that we start from epoch 0 in that case.",
+    )
+    arg_parser.add_argument(
         "--batch_split",
         dest="batch_split",
         default=1,
@@ -555,4 +576,4 @@ if __name__ == "__main__":
 
     deep_sdf.configure_logging(args)
 
-    main_function(args.experiment_directory, args.continue_from, int(args.batch_split))
+    main_function(args.experiment_directory, args.continue_from, int(args.batch_split), args.finetune_from)
