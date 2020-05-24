@@ -61,13 +61,61 @@ def compute_lift_faces(data_instance, answers, axis=0):
     mesh = trimesh.Trimesh(vertices=data_instance.x.cpu().detach(), faces=data_instance.face.t().cpu().detach())
     #mass_center = torch.mean(data_instance.x, axis=0)
     
-    pressures = torch.mean(answers[data_instance.face, 0], axis=0)
-#     areas = [compute_traingle_area(data_instance.x[a], data_instance.x[b], data_instance.x[c]) 
-#                 for a, b, c in data_instance.faces]
-#     normals = [compute_normal(data_instance.x[a], data_instance.x[b], data_instance.x[c], mass_center) 
-#                 for a, b, c in data_instance.faces]
-     
+    pressures = torch.mean(answers[data_instance.face, 0], axis=0) 
     mult = torch.tensor( - mesh.area_faces * mesh.face_normals[:, axis], dtype=torch.float).to('cuda:0')
+    lift = torch.mul(pressures, mult)
+    return torch.sum(lift[~torch.isnan(lift)])
+
+def compute_lift_faces_signs(data_instance, answers, axis=0):
+    mesh = trimesh.Trimesh(vertices=data_instance.x.cpu().detach(), faces=data_instance.face.t().cpu().detach())
+    #mass_center = torch.mean(data_instance.x, axis=0)
+
+    pressures = torch.mean(answers[data_instance.face, 0], axis=0) 
+    signs = np.sign(np.sum(np.sum(mesh.vertices[mesh.faces], axis=1) * mesh.face_normals, axis=1))
+    mult = torch.tensor( - mesh.area_faces * mesh.face_normals[:, axis] * signs, dtype=torch.float).to('cuda:0')
+    lift = torch.mul(pressures, mult)
+    return torch.sum(lift[~torch.isnan(lift)])
+
+
+def compute_lift_faces_diff(data_instance, answers, axis=0):
+    pressures = torch.mean(answers[data_instance.face, 0], axis=0)
+
+    # TODO: cahnge to x if needed
+    pos = data_instance.x
+    cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
+                  pos[data_instance.face[2]] - pos[data_instance.face[0]])
+    mult = - cross_prod[:, axis] / 2
+    lift = torch.mul(pressures, mult)
+    return torch.sum(lift[~torch.isnan(lift)])
+
+def compute_lift_faces_diff_signs(data_instance, answers, axis=0):
+    pressures = torch.mean(answers[data_instance.face, 0], axis=0)
+
+    # TODO: cahnge to x if needed
+    pos = data_instance.x
+    cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
+                  pos[data_instance.face[2]] - pos[data_instance.face[0]])
+    
+    signs = torch.sign(torch.sum(pos[data_instance.face[0]] * cross_prod, axis=1))
+    mult = - cross_prod[:, axis] * signs / 2
+    lift = torch.mul(pressures, mult)
+    return torch.sum(lift[~torch.isnan(lift)])
+
+def compute_signs_for_loss(data_instance, normals):
+    pos = data_instance.x
+    cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
+                  pos[data_instance.face[2]] - pos[data_instance.face[0]])
+    face_normals = torch.mean(normals[faces], axis=1)
+    return torch.sign(torch.sum(face_normals * cross_prod, axis=1))
+
+def compute_lift_faces_diff_mem_signs(data_instance, answers, signs, axis=0):
+    pressures = torch.mean(answers[data_instance.face, 0], axis=0)
+
+    # TODO: cahnge to x if needed
+    pos = data_instance.x
+    cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
+                  pos[data_instance.face[2]] - pos[data_instance.face[0]])
+    mult = - cross_prod[:, axis] * signs / 2
     lift = torch.mul(pressures, mult)
     return torch.sum(lift[~torch.isnan(lift)])
 
@@ -89,11 +137,12 @@ def make_data_instance_from_stl(fld_path, replace_inf=10e5, batch_norm=False) ->
 #             std_values = answers.std(axis=0)
 #         else:
 
-        mean_values = [-2.06707869e+00, 1.04133005e-01, 2.17513919e+02, 6.04485806e-05]
-        std_values = [3.71674873e+00, 4.93675056e-02, 1.10871494e+02, 2.63155496e-05]
+        mean_values = [-1.15994242e+01, 9.01274307e-01,  1.83840398e+03,  6.36532838e-05]
+        std_values = [4.78920149e+01, 3.70121534e-01, 7.36068558e+02, 2.35466637e-05]
         for f in range(answers.shape[1]):
-            answers[:, f] = (answers[:, f] - mean_values[f]) / std_values[f]
-        
+            #answers[:, f] = (answers[:, f] - mean_values[f]) / std_values[f]
+            answers[:, f] = (answers[:, f] - np.mean(answers[:, f])) / np.std(answers[:, f])
+            
         stl_path = fld_path.replace('fld', 'stl', 1)[:-9] + '.stl'
         mesh = trimesh.load(stl_path)
         
@@ -130,7 +179,6 @@ def make_data_instance_from_stl(fld_path, replace_inf=10e5, batch_norm=False) ->
                                                 global_std[None, 6:9], dtype=torch.float)
         data.viscous_moment = torch.tensor((scr_data['viscous_moment'] - global_mean[9:]) / 
                                                 global_std[None, 9:], dtype=torch.float)
-        data.path = fld_path
         data.path = fld_path
 
         return data
@@ -256,50 +304,40 @@ class CDFDataset(torch_geometric.data.Dataset):
 class CDFDatasetInMemory(torch_geometric.data.InMemoryDataset):
     
     def __init__(self, root, transform=None, pre_transform=None, 
-                             train=True, delimetr=0.95, split=None):
-        
+                             train=True, delimetr=0.95):
         self.delimetr = delimetr
         self.train = train
-        self.split = split
         
         super(CDFDatasetInMemory, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
     def processed_file_names(self):
-        
-        if self.split is not None:
-            if self.train:
-                return ['data_train_sp.pt']
-            else:
-                return ['data_test_sp.pt']
+        if self.train:
+            return ['data15_train_full_normalized.pt']
         else:
-            if self.train:
-                return ['data_train.pt']
-            else:
-                return ['data_test.pt']
+            return ['data15_test_full_normalized.pt']
 
- 
     def process(self):
-        
         # Get list of meshes
-        if self.split is not None:
-            mapping = generateNamesMapping(self.root)
-            with open(self.split, 'r') as json_data:
-                objNames = json.load(json_data)['ShapeNetV2']['02958343']
-            self.objects = [os.path.join(self.root, 'fld/' + mapping[name] + '.fld') for name in objNames if name in mapping.keys()]
-            print('Taken ' + str(len(self.objects)) + ' out of ' + str(len(objNames)))
-        else:
-            self.objects = list()
-            for (dirpath, dirnames, filenames) in os.walk(self.root):
-                self.objects += [os.path.join(dirpath, file) for file in filenames if file[-4:] == '.fld']
-            self.objects= self.objects
-
+#         if self.split is not None:
+#             mapping = generateNamesMapping(self.root)
+#             with open(self.split, 'r') as json_data:
+#                 objNames = json.load(json_data)['ShapeNetV2']['02958343']
+#             self.objects = [os.path.join(self.root, 'fld/' + mapping[name] + '.fld') for name in objNames if name in mapping.keys()]
+#             print('Taken ' + str(len(self.objects)) + ' out of ' + str(len(objNames)))
+      
+        self.objects = list()
+        for (dirpath, dirnames, filenames) in os.walk(self.root):
+            self.objects += [os.path.join(dirpath, file) for file in filenames if file[-4:] == '.fld']
+        
         delimetr = int(self.delimetr * len(self.objects))
         if self.train:
             self.objects = self.objects[:delimetr]
         else:
             self.objects = self.objects[delimetr:]
+            
+        print(len(self.objects))
     
         
         data_list = [ make_data_instance_from_stl(obj) for obj in self.objects]

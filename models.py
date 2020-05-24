@@ -27,14 +27,14 @@ class SplineBlock(nn.Module):
     def __init__(self, num_in_features, num_outp_features, mid_features, kernel=3, dim=3):
         super(SplineBlock, self).__init__()
         self.conv1 = SplineConv(num_in_features, mid_features, dim, kernel, is_open_spline=False)
-        #self.batchnorm1 = torch.nn.BatchNorm1d(mid_features)
+        self.batchnorm1 = torch.nn.BatchNorm1d(mid_features)
         self.conv2 = SplineConv(mid_features, 2 * mid_features, dim, kernel, is_open_spline=False)
         self.batchnorm2 = torch.nn.BatchNorm1d(2 * mid_features)
         self.conv3 = SplineConv(2 * mid_features + 3, num_outp_features, dim, kernel, is_open_spline=False)
   
     def forward(self, res, data):
-#        res = F.elu(self.batchnorm1(self.conv1(res, data.edge_index, data.edge_attr)))
-        res = F.elu(self.conv1(res, data.edge_index, data.edge_attr))
+        res = F.elu(self.batchnorm1(self.conv1(res, data.edge_index, data.edge_attr)))
+#        res = F.elu(self.conv1(res, data.edge_index, data.edge_attr))
         res = F.elu(self.batchnorm2(self.conv2(res, data.edge_index, data.edge_attr)))
 #         res = F.elu(self.conv2(res, data.edge_index, data.edge_attr))
         res = torch.cat([res, data.pos], dim=1)

@@ -213,9 +213,11 @@ def convert_sdf_samples_to_ply(
     num_faces = faces.shape[0]
 
     verts_tuple = np.zeros((num_verts,), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")])
+    norms_tuple = np.zeros((num_verts,), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")])
 
     for i in range(0, num_verts):
         verts_tuple[i] = tuple(mesh_points[i, :])
+        norms_tuple[i] = tuple(normals[i, :])
 
     faces_building = []
     for i in range(0, num_faces):
@@ -224,8 +226,9 @@ def convert_sdf_samples_to_ply(
 
     el_verts = plyfile.PlyElement.describe(verts_tuple, "vertex")
     el_faces = plyfile.PlyElement.describe(faces_tuple, "face")
+    el_norms = plyfile.PlyElement.describe(norms_tuple, "normals")
 
-    ply_data = plyfile.PlyData([el_verts, el_faces])
+    ply_data = plyfile.PlyData([el_verts, el_faces, el_norms])
     return ply_data
 
 
@@ -259,6 +262,7 @@ def plot_mesh_from_vector(decoder, initial_latent, N=256):
     
     cloud = PyntCloud.from_file('../Expirements/data/original_mesh.ply')
     cloud.plot(background='white', initial_point_size=0.003)
+    
     
 
 def get_trimesh_from_torch_geo_with_colors(mesh, preds):
