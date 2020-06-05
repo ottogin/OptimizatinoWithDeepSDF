@@ -19,6 +19,7 @@ from visualization_utils import plot_mesh_3d
 
 from models import *
 from datasets import *
+from dataset_atlasnet import CDFAtlasDatasetInMemory
 
 
 ALPHA = 1/4
@@ -37,16 +38,16 @@ def train(epoch, model, train_loader, device, optimizer):
     for data in tqdm(train_loader, leave=False):
         data = data.to(device)
         optimizer.zero_grad()
-        verticies_preds, global_preds = model(data)
-        #verticies_preds = model(data)
+        #verticies_preds, global_preds = model(data)
+        verticies_preds = model(data)
         
         vert_loss = F.mse_loss(data.y, verticies_preds)
-        global_loss = F.mse_loss(global_preds[:, :3], data.pressure_drag.reshape(-1, 3)) +\
-                      F.mse_loss(global_preds[:, 3:6], data.viscous_drag.reshape(-1, 3)) +\
-                      F.mse_loss(global_preds[:, 6:9], data.pressure_moment.reshape(-1, 3)) +\
-                      F.mse_loss(global_preds[:, 9:], data.viscous_moment.reshape(-1, 3))
+#         global_loss = F.mse_loss(global_preds[:, :3], data.pressure_drag.reshape(-1, 3)) +\
+#                       F.mse_loss(global_preds[:, 3:6], data.viscous_drag.reshape(-1, 3)) +\
+#                       F.mse_loss(global_preds[:, 6:9], data.pressure_moment.reshape(-1, 3)) +\
+#                       F.mse_loss(global_preds[:, 9:], data.viscous_moment.reshape(-1, 3))
 
-        loss = vert_loss + global_loss / 4
+        loss = vert_loss #+ global_loss / 4
         
         loss.backward()
         optimizer.step()
@@ -62,17 +63,17 @@ def validate(model, test_loader, device):
     for data in tqdm(test_loader):
         data = data.to(device)
         
-        verticies_preds, global_preds = model(data)
-        #verticies_preds = model(data)
+        #verticies_preds, global_preds = model(data)
+        verticies_preds = model(data)
 
         vert_loss = F.mse_loss(verticies_preds, data.y)
-        global_loss = F.mse_loss(global_preds[:, :3], data.pressure_drag.reshape(-1, 3)) +\
-                      F.mse_loss(global_preds[:, 3:6], data.viscous_drag.reshape(-1, 3)) +\
-                      F.mse_loss(global_preds[:, 6:9], data.pressure_moment.reshape(-1, 3)) +\
-                      F.mse_loss(global_preds[:, 9:], data.viscous_moment.reshape(-1, 3))
+#         global_loss = F.mse_loss(global_preds[:, :3], data.pressure_drag.reshape(-1, 3)) +\
+#                       F.mse_loss(global_preds[:, 3:6], data.viscous_drag.reshape(-1, 3)) +\
+#                       F.mse_loss(global_preds[:, 6:9], data.pressure_moment.reshape(-1, 3)) +\
+#                       F.mse_loss(global_preds[:, 9:], data.viscous_moment.reshape(-1, 3))
 
         r2_score += getR2Score(data.y[:, 0].cpu(), verticies_preds[:, 0].cpu().detach())
-        curr_loss = vert_loss + global_loss / 4 #(vert_loss + ALPHA * global_loss) / 2
+        curr_loss = vert_loss #+ global_loss / 4 #(vert_loss + ALPHA * global_loss) / 2
         
         loss += curr_loss.cpu().detach().numpy()
     return loss / len(test_loader), r2_score / len(test_loader)
@@ -130,9 +131,8 @@ if __name__ == "__main__":
 #     val_dataset   = CDFDatasetInMemory('/cvlabdata2/home/artem/Data/cars_refined/simulated', 
 #                                        split='examples/splits/sv2_cars_clear_test.json', 
 #                                        train=False) #, delimetr=0.999
-    train_dataset = CDFDatasetInMemory('/cvlabdata2/home/artem/Data/cars_remeshed_dsdf/outputs/fld') #, delimetr=0.002
-    val_dataset   = CDFDatasetInMemory('/cvlabdata2/home/artem/Data/cars_remeshed_dsdf/outputs/fld',
-                                       train=False) #, delimetr=0.999
+    train_dataset = CDFAtlasDatasetInMemory('/cvlabdata2/home/artem/Data/cars_remeshed_dsdf/outputs/fld', delimetr=0.3)
+    val_dataset   = CDFAtlasDatasetInMemory('/cvlabdata2/home/artem/Data/cars_remeshed_dsdf/outputs/fld', train=False, delimetr=0.95)
     
     print( "Train size : ", len(train_dataset) )
     print( "Test size : ", len(val_dataset) )

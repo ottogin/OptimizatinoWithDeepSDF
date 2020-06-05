@@ -24,17 +24,21 @@ class MoNet(nn.Module):
 
 
 class SplineBlock(nn.Module):
-    def __init__(self, num_in_features, num_outp_features, mid_features, kernel=3, dim=3):
+    def __init__(self, num_in_features, num_outp_features, mid_features, kernel=3, dim=3, batchnorm1=True):
         super(SplineBlock, self).__init__()
+        self.batchnorm1 = batchnorm1
         self.conv1 = SplineConv(num_in_features, mid_features, dim, kernel, is_open_spline=False)
-        self.batchnorm1 = torch.nn.BatchNorm1d(mid_features)
+        if self.batchnorm1:
+            self.batchnorm1 = torch.nn.BatchNorm1d(mid_features)
         self.conv2 = SplineConv(mid_features, 2 * mid_features, dim, kernel, is_open_spline=False)
         self.batchnorm2 = torch.nn.BatchNorm1d(2 * mid_features)
         self.conv3 = SplineConv(2 * mid_features + 3, num_outp_features, dim, kernel, is_open_spline=False)
   
     def forward(self, res, data):
-        res = F.elu(self.batchnorm1(self.conv1(res, data.edge_index, data.edge_attr)))
-#        res = F.elu(self.conv1(res, data.edge_index, data.edge_attr))
+        if self.batchnorm1:
+            res = F.elu(self.batchnorm1(self.conv1(res, data.edge_index, data.edge_attr)))
+        else:
+            res = F.elu(self.conv1(res, data.edge_index, data.edge_attr))
         res = F.elu(self.batchnorm2(self.conv2(res, data.edge_index, data.edge_attr)))
 #         res = F.elu(self.conv2(res, data.edge_index, data.edge_attr))
         res = torch.cat([res, data.pos], dim=1)
@@ -106,16 +110,16 @@ class SplineCNN8Residuals(nn.Module):
         return res
     
 class SplineCNN8(nn.Module):
-    def __init__(self, num_features, kernel=3, dim=3):
+    def __init__(self, num_features, kernel=3, dim=3, batchnorm1=True):
         super(SplineCNN8, self).__init__()
-        self.block1 = SplineBlock(num_features, 16, 8, kernel, dim)
-        self.block2 = SplineBlock(16, 64, 32, kernel, dim)
-        self.block3 = SplineBlock(64, 64, 128, kernel, dim)
-        self.block4 = SplineBlock(64, 8, 16, kernel, dim)
-        self.block5 = SplineBlock(8, 32, 16, kernel, dim)
-        self.block6 = SplineBlock(32, 64, 32, kernel, dim)
-        self.block7 = SplineBlock(64, 64, 128, kernel, dim)
-        self.block8 = SplineBlock(64, 4, 16, kernel, dim)
+        self.block1 = SplineBlock(num_features, 16, 8, kernel, dim, batchnorm1)
+        self.block2 = SplineBlock(16, 64, 32, kernel, dim, batchnorm1)
+        self.block3 = SplineBlock(64, 64, 128, kernel, dim, batchnorm1)
+        self.block4 = SplineBlock(64, 8, 16, kernel, dim, batchnorm1)
+        self.block5 = SplineBlock(8, 32, 16, kernel, dim, batchnorm1)
+        self.block6 = SplineBlock(32, 64, 32, kernel, dim, batchnorm1)
+        self.block7 = SplineBlock(64, 64, 128, kernel, dim, batchnorm1)
+        self.block8 = SplineBlock(64, 4, 16, kernel, dim, batchnorm1)
 
     def forward(self, data):
         res = data.x

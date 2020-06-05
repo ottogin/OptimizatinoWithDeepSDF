@@ -265,8 +265,8 @@ def plot_mesh_from_vector(decoder, initial_latent, N=256):
     
     
 
-def get_trimesh_from_torch_geo_with_colors(mesh, preds):
-    norm = mpl.colors.Normalize(vmin= -8, vmax=8)
+def get_trimesh_from_torch_geo_with_colors(mesh, preds, vmin=-8, vmax=8):
+    norm = mpl.colors.Normalize(vmin= vmin, vmax=vmax)
     cmap = cm.hot
     m = cm.ScalarMappable(norm=norm, cmap=cmap)
     

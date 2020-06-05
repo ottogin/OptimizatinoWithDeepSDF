@@ -84,7 +84,7 @@ def compute_lift_faces_diff(data_instance, answers, axis=0):
     pos = data_instance.x
     cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
                   pos[data_instance.face[2]] - pos[data_instance.face[0]])
-    mult = - cross_prod[:, axis] / 2
+    mult = -cross_prod[:, axis] / 2
     lift = torch.mul(pressures, mult)
     return torch.sum(lift[~torch.isnan(lift)])
 
@@ -101,12 +101,18 @@ def compute_lift_faces_diff_signs(data_instance, answers, axis=0):
     lift = torch.mul(pressures, mult)
     return torch.sum(lift[~torch.isnan(lift)])
 
-def compute_signs_for_loss(data_instance, normals):
-    pos = data_instance.x
-    cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
-                  pos[data_instance.face[2]] - pos[data_instance.face[0]])
-    face_normals = torch.mean(normals[faces], axis=1)
-    return torch.sign(torch.sum(face_normals * cross_prod, axis=1))
+def compute_signs_for_loss(ply_mesh):
+    faces = ply_mesh['face']['vertex_indices']
+    pos =  np.hstack(( ply_mesh['vertex']['x'][:, None], 
+                   ply_mesh['vertex']['y'][:, None], 
+                   ply_mesh['vertex']['z'][:, None]))
+    normals = np.hstack(( ply_mesh['normals']['x'][:, None], 
+                      ply_mesh['normals']['y'][:, None], 
+                      ply_mesh['normals']['z'][:, None]))
+
+    cross_prod = np.cross(pos[faces[:,1]] - pos[faces[:,0]], pos[faces[:,2]] - pos[faces[:,0]])
+    face_normals = np.mean(normals[faces], axis=1)
+    return np.sign(np.sum(face_normals * cross_prod, axis=1))
 
 def compute_lift_faces_diff_mem_signs(data_instance, answers, signs, axis=0):
     pressures = torch.mean(answers[data_instance.face, 0], axis=0)
@@ -115,12 +121,12 @@ def compute_lift_faces_diff_mem_signs(data_instance, answers, signs, axis=0):
     pos = data_instance.x
     cross_prod = (pos[data_instance.face[1]] - pos[data_instance.face[0]]).cross(
                   pos[data_instance.face[2]] - pos[data_instance.face[0]])
-    mult = - cross_prod[:, axis] * signs / 2
+    mult = cross_prod[:, axis] * signs / 2
     lift = torch.mul(pressures, mult)
     return torch.sum(lift[~torch.isnan(lift)])
 
 
-def make_data_instance_from_stl(fld_path, replace_inf=10e5, batch_norm=False) -> torch_geometric.data.Data:
+def make_data_instance_from_stl(fld_path, replace_inf=10e5, batch_norm=False, normilize=True) -> torch_geometric.data.Data:
         ''' Takes a path to generated fld file with following colomns: x,y,z,p,k,omega,nut 
             and converts it into a geometric data instance.
         '''
@@ -139,9 +145,10 @@ def make_data_instance_from_stl(fld_path, replace_inf=10e5, batch_norm=False) ->
 
         mean_values = [-1.15994242e+01, 9.01274307e-01,  1.83840398e+03,  6.36532838e-05]
         std_values = [4.78920149e+01, 3.70121534e-01, 7.36068558e+02, 2.35466637e-05]
-        for f in range(answers.shape[1]):
-            #answers[:, f] = (answers[:, f] - mean_values[f]) / std_values[f]
-            answers[:, f] = (answers[:, f] - np.mean(answers[:, f])) / np.std(answers[:, f])
+        if normilize:
+            for f in range(answers.shape[1]):
+                #answers[:, f] = (answers[:, f] - mean_values[f]) / std_values[f]
+                answers[:, f] = (answers[:, f] - np.mean(answers[:, f])) / np.std(answers[:, f])
             
         stl_path = fld_path.replace('fld', 'stl', 1)[:-9] + '.stl'
         mesh = trimesh.load(stl_path)
