@@ -31,3 +31,9 @@ pyntcloud_plot.ply
 pyntcloud_plot_assets/
 training.error
 pyopengl/
+PyMesh/
+atlas_maesh.ply
+atlasnet/
+atlasnet_retrained/
+test_deformed.ply
+test_orig.ply
